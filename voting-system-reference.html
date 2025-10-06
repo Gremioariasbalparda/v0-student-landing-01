@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>CEU — Sistema de Votación</title>
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f6f8fb; --card:#fff; --text:#0b0b0b; --muted:#6b7280; --accent:#0f172a;
+      --success:#15803d; --danger:#dc2626; --warning:#b45309; --info:#2563eb; --border:#e6e9ef;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{font-family:Inter,system-ui;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+
+    .wrap{width:100%;max-width:none;margin:0;padding:20px 32px}
+    .header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:52px;height:52px;border-radius:10px;background:var(--accent);color:#fff;display:grid;place-items:center}
+    .title{font-weight:700}
+    .actions{display:flex;gap:8px;align-items:center}
+    .btn{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .layout{display:grid;grid-template-columns:280px 1fr 360px;gap:16px}
+    @media(max-width:1100px){ .layout{grid-template-columns:1fr; } .right, .left { order: 3 } .center { order:2 } }
+
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(2,6,23,0.04)}
+    .section-title{font-weight:700;margin:0 0 10px}
+    .group-list{display:flex;flex-direction:column;gap:8px}
+    .group-item{padding:8px;border-radius:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .small{font-size:13px;color:var(--muted)}
+    .voting-list{display:grid;gap:12px}
+    .voting-card{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;border:1px solid var(--border);cursor:pointer;background:transparent;position:relative}
+    .voting-card .delete-btn{position:absolute;top:8px;right:8px;border:none;background:transparent;color:#9ca3af;cursor:pointer;font-size:14px}
+    /* status borders */
+    .status-active{border-left:6px solid var(--info)}
+    .status-final{border-left:6px solid var(--success)}
+    .status-oculto{border-left:6px solid var(--warning)}
+
+    .voting-meta{display:flex;gap:8px;align-items:center;justify-content:space-between}
+    .voting-title{font-weight:700}
+    .vote-buttons{display:flex;gap:8px;margin-top:12px}
+    .vote-btn{padding:10px 12px;border-radius:10px;border:1px solid var(--border);cursor:pointer}
+    .vote-btn[disabled]{opacity:.5;cursor:not-allowed}
+    .results{display:flex;gap:8px;margin-top:12px}
+    .result-pill{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);text-align:center}
+    .result-label{font-weight:700}
+    .result-approved{color:var(--success)}
+    .result-rejected{color:var(--danger)}
+    .result-tied{color:var(--warning)}
+    .log{max-height:200px;overflow:auto;padding:8px;border-radius:6px;border:1px dashed var(--border);background:#fafafa;font-size:13px}
+    #pdfViewer{width:100%;height:420px;border:1px solid var(--border);border-radius:8px;margin-top:12px;display:none}
+    #docPreview{width:100%;border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px;background:#fff;display:none}
+    .modal-back{position:fixed;inset:0;background:rgba(2,6,23,0.35);display:none;align-items:center;justify-content:center;z-index:999}
+    .modal{background:var(--card);padding:18px;border-radius:10px;width:100%;max-width:900px;border:1px solid var(--border)}
+    .form-row{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+    input, select, textarea{padding:10px;border-radius:8px;border:1px solid var(--border);font-size:14px}
+    .small-note{font-size:13px;color:var(--muted)}
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header class="header">
+      <div class="brand">
+        <div class="logo"><i class="fa-solid fa-poll"></i></div>
+        <div>
+          <div class="title">VotingSphere — CEU</div>
+          <div class="small-note">Sistema de votaciones por grupos · Acceso controlado</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <div id="currentUserDisplay" class="small muted"></div>
+        <button id="logoutBtn" class="btn">Cerrar sesión</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="left card">
+        <h4 class="section-title">Mis grupos</h4>
+        <div id="groupsContainer" class="group-list small"></div>
+        <hr style="margin:12px 0;border:none;border-top:1px solid var(--border)"/>
+        <div>
+          <h4 class="section-title">Crear votación</h4>
+          <div class="small-note">Solo para grupos a los que perteneces. Adjunta PDF y documenta la resolución (fuente y tamaño).</div>
+          <div style="margin-top:10px">
+            <button id="openCreateBtn" class="btn primary">Nueva votación</button>
+          </div>
+        </div>
+      </aside>
+
+      <section class="center">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h4 class="section-title">Votaciones disponibles</h4>
+            <div class="small muted" id="filterInfo">Mostrando todas</div>
+          </div>
+
+          <div id="votingList" class="voting-list" style="margin-top:12px"></div>
+
+          <!-- admin: all votings list -->
+          <div id="adminAllList" class="card" style="margin-top:14px;display:none">
+            <h4 class="section-title">Panel administrador — Todas las votaciones</h4>
+            <div id="allVotingsContainer" style="display:grid;gap:8px;margin-top:8px"></div>
+            <div class="small-note" style="margin-top:8px">Eliminar una votación la quita permanentemente del listado (acción irreversible).</div>
+          </div>
+
+          <div style="margin-top:12px" class="muted small">Nota: verás votaciones solo de tus grupos; resultados y ausentes se muestran solo al revelar.</div>
+        </div>
+      </section>
+
+      <aside class="right card">
+        <h4 class="section-title" id="detailTitle">Detalle de votación</h4>
+        <div id="detailEmpty" class="muted small">Seleccione una votación para ver detalles y participar.</div>
+
+        <div id="detailPane" style="display:none">
+          <!-- Vista SOLO contador (para secreto + ya votó + no revelado) -->
+<div id="countdownPane" class="countdown-pane" aria-live="polite">
+  <div class="countdown-title">Votación secreta — Revelación programada</div>
+  <div class="small muted">Tu voto fue registrado. Los resultados se mostrarán cuando finalice el contador.</div>
+  <div id="countdownTimer" class="countdown-timer" style="margin-top:8px">—:—:—</div>
+</div>
+
+          <div id="detailHeader" class="muted small"></div>
+          <h3 id="detailVotingTitle" style="margin-top:8px"></h3>
+          <div id="detailText" class="muted small" style="margin-top:8px"></div>
+
+          <div class="vote-buttons" id="voteButtons">
+            <button id="btnYes" class="vote-btn vote-yes"><i class="fa-solid fa-check"></i> SÍ</button>
+            <button id="btnNo" class="vote-btn vote-no"><i class="fa-solid fa-xmark"></i> NO</button>
+            <button id="btnAbs" class="vote-btn vote-abs"><i class="fa-solid fa-minus"></i> ABSTENCIÓN</button>
+          </div>
+
+          <div id="votedInfo" class="muted small" style="margin-top:8px"></div>
+
+          <div style="margin-top:12px">
+            <div class="results" id="resultsPills">
+              <div class="result-pill">
+                <div class="result-label">SÍ</div>
+                <div id="rYes" style="font-size:18px;font-weight:700">—</div>
+              </div>
+              <div class="result-pill">
+                <div class="result-label">NO</div>
+                <div id='rNo' style="font-size:18px;font-weight:700">—</div>
+              </div>
+              <div class="result-pill">
+                <div class="result-label">ABST.</div>
+                <div id="rAbs" style="font-size:18px;font-weight:700">—</div>
+              </div>
+              <div class="result-pill">
+                <div class="result-label">AUSENTES</div>
+                <div id="rAbsent" style="font-size:18px;font-weight:700">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="finalResultText" style="margin-top:10px;font-weight:700"></div>
+
+          <iframe id="pdfViewer" title="Documento adjunto"></iframe>
+          <div id="docPreview" aria-live="polite"></div>
+
+          <div id="adminControls" style="margin-top:12px;display:none">
+            <div class="small muted">Controles de administrador</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="addYes" class="btn">+1 SÍ</button>
+              <button id="addNo" class="btn">+1 NO</button>
+              <button id="addAbs" class="btn">+1 ABST</button>
+              <button id="revealBtn" class="btn ghost">Revelar / Finalizar</button>
+              <!-- Botón ojo: revela SOLO para el admin que lo aprieta -->
+              <button id="adminPreviewBtn" class="btn" title="Vista previa (admin)">👁️ Vista admin</button>
+            </div>
+
+            <div style="margin-top:12px">
+              <div class="small muted">Registro de acciones</div>
+              <div id="adminLog" class="log" style="margin-top:8px"></div>
+
+              <!-- Vista privada de votos (solo cuando admin activa 'ojo') -->
+              <div id="adminVotePreview" class="log" style="margin-top:8px;display:none"></div>
+            </div>
+          </div>
+
+          <div id="attachmentControls" style="margin-top:12px;display:none">
+            <div class="small muted">Adjuntar / actualizar PDF (visible para creador o admin)</div>
+            <input id="uploadPdf" type="file" accept="application/pdf" />
+            <div class="small muted" style="margin-top:6px">Si subes un PDF será embebido en la votación.</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="credentials.js"></script>
+  <script>
+    // ---------- auth & basic config ----------
+    const sessionUser = sessionStorage.getItem('votingUser');
+    const sessionRole = sessionStorage.getItem('votingRole') || 'user';
+    const sessionName = sessionStorage.getItem('votingName') || sessionUser || '';
+
+    if (!sessionUser) { window.location.href = 'login.html'; throw new Error('no-session'); }
+
+    // users meta now read from credentials.js
+    const usersMeta = (typeof CREDENTIALS !== 'undefined' && CREDENTIALS.users) ? Object.fromEntries(
+      Object.entries(CREDENTIALS.users).map(([k,v]) => [k, { name: v.name, groups: v.groups, isAdmin: (v.role === 'admin') }])
+    ) : {};
+
+    if (!usersMeta[sessionUser]) { alert('Usuario no configurado. Contacte admin.'); sessionStorage.clear(); window.location.href='login.html'; throw new Error('user-not-configured'); }
+
+    const currentUser = sessionUser;
+    const currentIsAdmin = usersMeta[currentUser].isAdmin;
+    const currentGroups = usersMeta[currentUser].groups || [];
+
+    // ---------- storage ----------
+    const STORAGE_KEY = 'votings_v4';
+    function loadState(){ try { const raw = localStorage.getItem(STORAGE_KEY); if(!raw) return initSample(); const p = JSON.parse(raw); if(!p || !Array.isArray(p.votings)) return initSample(); return p; } catch(e){ return initSample(); } }
+    function saveState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+
+    function initSample(){
+      const now = Date.now();
+      const sample = {
+        votings: [
+          // ejemplo: ambos empiezan como ocultos; la diferencia será solo el reveal automático por tiempo
+          { id:'v-001', title:'Elección Comisión Directiva', text:'Elegir nueva comisión directiva 2025', group:'GAB', mode:'public_realtime', createdBy:'admin', createdAt:now, votes:{yes:0,no:0,abs:0}, votesByUser:{}, status:'active', revealed:false, revealAt:null, logs:[], document:{ body:'Texto de ejemplo de la resolución', font:'Inter, system-ui', fontSize:14 }, attachment:null },
+          { id:'v-002', title:'Aprobación Reglamento', text:'Aprobar nuevo reglamento interno.', group:'AECOS', mode:'secret_delayed', createdBy:'admin', createdAt:now, votes:{yes:0,no:0,abs:0}, votesByUser:{}, status:'active', revealed:false, revealAt: now + 1000*60*60, logs:[], document:{ body:'Reglamento propuesto...', font:'Georgia, serif', fontSize:14 }, attachment:null }
+        ]
+      };
+      saveState(sample);
+      return sample;
+    }
+
+    let state = loadState();
+
+    // helpers
+    const byId = id => document.getElementById(id);
+    const fmtDate = ts => new Date(ts).toLocaleString();
+    const generateId = ()=> 'v-'+Math.random().toString(36).slice(2,9);
+
+    function groupMemberCount(group){
+      return Object.keys(usersMeta).filter(k => Array.isArray(usersMeta[k].groups) && usersMeta[k].groups.includes(group)).length;
+    }
+
+    // elements
+    byId('currentUserDisplay').textContent = `${usersMeta[currentUser].name} (${currentUser})`;
+    const groupsContainer = byId('groupsContainer');
+    const votingListEl = byId('votingList');
+    const allVotingsContainer = byId('allVotingsContainer');
+    const adminAllList = byId('adminAllList');
+    const detailPane = byId('detailPane');
+    const detailEmpty = byId('detailEmpty');
+
+    // render groups
+    function renderGroups(){
+      groupsContainer.innerHTML = '';
+      currentGroups.forEach(g=>{
+        const el = document.createElement('div');
+        el.className = 'group-item';
+        el.innerHTML = `<div>${g}</div><div class="small muted">Miembro</div>`;
+        groupsContainer.appendChild(el);
+      });
+    }
+
+    // render voting list: actuales (solo tus grupos y no finalizadas) + finalizadas (visibles por todos)
+    function renderVotingList(){
+      votingListEl.innerHTML = '';
+
+      // actuales: pertenecen al usuario y no están finalizadas
+      const active = state.votings.filter(v => currentGroups.includes(v.group) && v.status !== 'final')
+                                   .sort((a,b)=>b.createdAt - a.createdAt);
+
+      // finalizadas: todas las votaciones con status 'final' (visibles para todos)
+      const finalized = state.votings.filter(v => v.status === 'final')
+                                     .sort((a,b)=>b.createdAt - a.createdAt);
+
+      // encabezado y lista de actuales
+      const activeHeader = document.createElement('div');
+      activeHeader.style.marginBottom = '8px';
+      activeHeader.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>Votaciones actuales</strong></div>
+        <div class="small muted">${active.length} para ${currentGroups.join(', ')}</div>
+      </div>`;
+      votingListEl.appendChild(activeHeader);
+
+      if (!active.length){
+        const empty = document.createElement('div');
+        empty.className = 'muted small';
+        empty.textContent = 'No hay votaciones activas para tus grupos.';
+        votingListEl.appendChild(empty);
+      } else {
+        active.forEach(v=>{
+          const card = document.createElement('div');
+          card.className = 'voting-card card';
+          if (v.status === 'final') card.classList.add('status-final');
+          else if (!v.revealed) card.classList.add('status-oculto');
+          else card.classList.add('status-active');
+          card.dataset.id = v.id;
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'delete-btn';
+          deleteBtn.title = 'Eliminar (admin)';
+          deleteBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+          if (currentIsAdmin) {
+            deleteBtn.addEventListener('click', (ev)=>{
+              ev.stopPropagation();
+              if (!confirm('Eliminar votación permanentemente?')) return;
+              deleteVoting(v.id);
+            });
+            card.appendChild(deleteBtn);
+          }
+
+          const modeLabel = v.mode === 'public_realtime' ? 'Normal' : 'Secreto';
+          card.innerHTML += `
+            <div class="voting-meta">
+              <div>
+                <div class="voting-title">${v.title}</div>
+                <div class="muted small">${v.group} · ${modeLabel}${v.revealed ? ' · revelada' : ''}</div>
+              </div>
+              <div style="text-align:right">
+                <div class="muted small">${new Date(v.createdAt).toLocaleDateString()}</div>
+                <div style="margin-top:8px"><button class="btn" data-id="${v.id}">Abrir</button></div>
+              </div>
+            </div>
+          `;
+          votingListEl.appendChild(card);
+        });
+      }
+
+      // separador
+      const hr = document.createElement('div');
+      hr.style.height = '1px';
+      hr.style.margin = '12px 0';
+      hr.style.background = 'transparent';
+      votingListEl.appendChild(hr);
+
+      // encabezado y lista de finalizadas (visibles por todos)
+      const finHeader = document.createElement('div');
+      finHeader.style.marginBottom = '8px';
+      finHeader.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>Votaciones finalizadas</strong></div>
+        <div class="small muted">${finalized.length} finalizadas</div>
+      </div>`;
+      votingListEl.appendChild(finHeader);
+
+      if (!finalized.length){
+        const emptyF = document.createElement('div');
+        emptyF.className = 'muted small';
+        emptyF.textContent = 'No hay votaciones finalizadas aún.';
+        votingListEl.appendChild(emptyF);
+      } else {
+        finalized.forEach(v=>{
+          const card = document.createElement('div');
+          card.className = 'voting-card card status-final';
+          card.dataset.id = v.id;
+          // show open button but no delete here (admin panel already has delete)
+          card.innerHTML = `
+            <div class="voting-meta">
+              <div>
+                <div class="voting-title">${v.title}</div>
+                <div class="muted small">${v.group} · ${v.mode} · Finalizada</div>
+              </div>
+              <div style="text-align:right">
+                <div class="muted small">${new Date(v.createdAt).toLocaleDateString()}</div>
+                <div style="margin-top:8px"><button class="btn" data-id="${v.id}">Abrir</button></div>
+              </div>
+            </div>
+          `;
+          votingListEl.appendChild(card);
+        });
+      }
+
+      // refrescar panel admin completo
+      renderAdminAllList();
+    }
+
+    // admin all votings list (visible solo admin)
+    function renderAdminAllList(){
+      if (!currentIsAdmin) { adminAllList.style.display='none'; return; }
+      adminAllList.style.display='block';
+      allVotingsContainer.innerHTML = '';
+      state.votings.slice().sort((a,b)=>b.createdAt - a.createdAt).forEach(v=>{
+        const row = document.createElement('div');
+        row.className = 'voting-card card';
+        row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center';
+        // status border color
+        if (v.status === 'final') row.classList.add('status-final'); else if (!v.revealed) row.classList.add('status-oculto'); else row.classList.add('status-active');
+
+        const left = document.createElement('div');
+        left.innerHTML = `<div style="font-weight:700">${v.title}</div><div class="muted small">${v.group} · ${v.mode} · ${new Date(v.createdAt).toLocaleString()}</div>`;
+        const right = document.createElement('div');
+        right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center';
+        const openBtn = document.createElement('button'); openBtn.className='btn'; openBtn.textContent='Abrir'; openBtn.addEventListener('click', ()=> showDetail(v.id));
+        const delBtn = document.createElement('button'); delBtn.className='btn'; delBtn.textContent='X'; delBtn.title='Eliminar votación'; delBtn.addEventListener('click', ()=>{
+          if (!confirm('Eliminar votación permanentemente?')) return;
+          deleteVoting(v.id);
+        });
+        right.appendChild(openBtn); right.appendChild(delBtn);
+        row.appendChild(left); row.appendChild(right);
+        allVotingsContainer.appendChild(row);
+      });
+    }
+
+    // delete voting (admin)
+    function deleteVoting(vId){
+      if (!currentIsAdmin) return alert('Solo administradores pueden eliminar votaciones.');
+      const idx = state.votings.findIndex(x=>x.id===vId);
+      if (idx === -1) return;
+      const v = state.votings[idx];
+      state.votings.splice(idx,1);
+      saveState(state);
+      // record admin action in logs (optional: store in separate audit)
+      // refresh UI
+      renderVotingList();
+      if (activeVotingId === vId) { detailPane.style.display='none'; detailEmpty.style.display='block'; activeVotingId = null; }
+      alert('Votación eliminada.');
+    }
+
+    // detail view
+    let activeVotingId = null;
+    function showDetail(vId){
+      const v = state.votings.find(x=>x.id===vId);
+      if (!v) return;
+      activeVotingId = vId;
+      detailEmpty.style.display = 'none';
+      detailPane.style.display = 'block';
+      byId('detailVotingTitle').textContent = v.title;
+      byId('detailText').textContent = v.text;
+      byId('detailHeader').textContent = `Grupo: ${v.group} · Modo: ${v.mode} · Creada por: ${v.createdBy}`;
+      renderDocAndAttachment(v);
+      renderResults(v);
+      renderVoteButtons(v);
+      renderAdminControls(v);
+      byId('attachmentControls').style.display = (currentIsAdmin || v.createdBy===currentUser) ? 'block' : 'none';
+    }
+
+    function renderDocAndAttachment(v){
+      const dp = byId('docPreview');
+      const pdf = byId('pdfViewer');
+      dp.style.display = 'none'; pdf.style.display = 'none';
+      if (v.document && v.document.body){
+        dp.style.display = 'block';
+        dp.style.fontFamily = v.document.font || 'Inter,system-ui';
+        dp.style.fontSize = (v.document.fontSize || 14) + 'px';
+        dp.innerHTML = v.document.body.replace(/\n/g,'<br>');
+      }
+      if (v.attachment && v.attachment.dataUrl){
+        pdf.style.display = 'block';
+        // force reload of iframe (avoid caching issues)
+        try { pdf.src = ''; void pdf.offsetHeight; pdf.src = v.attachment.dataUrl; } catch(e){ pdf.src = v.attachment.dataUrl; }
+      }
+    }
+
+    // show counts only if v.revealed === true
+    function renderResults(v){
+      const yes = v.votes.yes||0, no = v.votes.no||0, absv = v.votes.abs||0;
+      const voters = v.votesByUser ? Object.keys(v.votesByUser).length : 0;
+      const registered = groupMemberCount(v.group);
+      const absent = Math.max(0, registered - voters);
+      // Mostrar resultados SOLO si la votación fue revelada/finalizada
+      const canShow = !!v.revealed;
+ 
+      byId('rYes').textContent = canShow ? yes : '—';
+      byId('rNo').textContent = canShow ? no : '—';
+      byId('rAbs').textContent = canShow ? absv : '—';
+      byId('rAbsent').textContent = canShow ? absent : '—';
+ 
+      const el = byId('finalResultText');
+      if (canShow){
+        if (yes > no) { el.textContent = 'APROBADO'; el.className = 'result-approved'; }
+        else if (no > yes) { el.textContent = 'RECHAZADO'; el.className = 'result-rejected'; }
+        else { el.textContent = 'EMPATE'; el.className = 'result-tied'; }
+      } else {
+        el.textContent = (v.mode === 'secret_delayed') ? 'Resultado oculto hasta revelación' : 'Resultado oculto hasta que admin revele';
+        el.className = '';
+      }
+    }
+
+    // voting UI
+    function renderVoteButtons(v){
+      const hasVoted = !!v.votesByUser && !!v.votesByUser[currentUser];
+      const allowed = currentGroups.includes(v.group) && v.status !== 'final';
+      byId('btnYes').disabled = !allowed || !!hasVoted;
+      byId('btnNo').disabled = !allowed || !!hasVoted;
+      byId('btnAbs').disabled = !allowed || !!hasVoted;
+
+      if (!hasVoted){
+        byId('votedInfo').textContent = 'No has votado aún. 1 voto por persona.';
+      } else {
+        if (v.revealed){
+          byId('votedInfo').textContent = `Has votado: ${v.votesByUser[currentUser]}`;
+        } else {
+          byId('votedInfo').textContent = 'Has votado (tu elección se mostrará tras la revelación)';
+        }
+      }
+    }
+
+    // admin preview helpers (persiste en sessionStorage por admin)
+    function isAdminPreview(vId){
+      return currentIsAdmin && !!sessionStorage.getItem('adminPreview:' + vId);
+    }
+
+    function toggleAdminPreview(vId){
+      if (!currentIsAdmin) return;
+      const key = 'adminPreview:' + vId;
+      if (sessionStorage.getItem(key)) sessionStorage.removeItem(key);
+      else sessionStorage.setItem(key, '1');
+    }
+
+    function renderAdminControls(v){
+      if (!currentIsAdmin){ byId('adminControls').style.display='none'; return; }
+      byId('adminControls').style.display='block';
+      const logEl = byId('adminLog'); logEl.innerHTML='';
+      (v.logs || []).slice().reverse().forEach(l=>{
+        const d = document.createElement('div');
+        d.innerHTML = `<div style="font-size:13px"><strong>${l.actor}</strong> — ${l.action} <span class="muted" style="font-size:12px">(${fmtDate(l.ts)})</span></div>`;
+        logEl.appendChild(d);
+      });
+
+      // actualizar texto del botón de preview según estado
+      const previewBtn = byId('adminPreviewBtn');
+      if (previewBtn){
+        previewBtn.textContent = isAdminPreview(v.id) ? '👁️ Ocultar vista' : '👁️ Vista admin';
+      }
+
+      byId('revealBtn').textContent = v.revealed ? 'Revelado · Finalizar' : 'Revelar resultado';
+
+      // rellenar vista privada de votos (solo si admin la activó)
+      const pv = byId('adminVotePreview');
+      if (!pv) return;
+      pv.innerHTML = '';
+      if (isAdminPreview(v.id)){
+        pv.style.display = 'block';
+        const hdr = document.createElement('div');
+        hdr.innerHTML = `<div style="font-weight:700;margin-bottom:6px">Vista previa de votos (solo visible para admin)</div>`;
+        pv.appendChild(hdr);
+        // lista de votos por usuario
+        const list = document.createElement('div');
+        list.style.display = 'grid';
+        list.style.gap = '6px';
+        if (v.votesByUser && Object.keys(v.votesByUser).length){
+          Object.entries(v.votesByUser).forEach(([uid, opt])=>{
+            const row = document.createElement('div');
+            row.innerHTML = `<strong>${usersMeta[uid]?.name || uid}</strong> — ${String(opt).toUpperCase()}`;
+            list.appendChild(row);
+          });
+        } else {
+          const none = document.createElement('div');
+          none.className = 'small muted';
+          none.textContent = 'Aún no hay votos registrados por usuarios.';
+          list.appendChild(none);
+        }
+
+        // mostrar manualAdds pendientes
+        if (v.manualAdds && (v.manualAdds.yes||v.manualAdds.no||v.manualAdds.abs)){
+          const mHdr = document.createElement('div');
+          mHdr.style.marginTop = '8px';
+          mHdr.style.fontWeight = '700';
+          mHdr.textContent = 'Votos agregados por admin (pendientes/aplicados)';
+          pv.appendChild(mHdr);
+          const mList = document.createElement('div');
+          mList.style.marginTop = '6px';
+          if (v.manualAdds.yes) mList.innerHTML += `<div>+${v.manualAdds.yes} SÍ</div>`;
+          if (v.manualAdds.no) mList.innerHTML += `<div>+${v.manualAdds.no} NO</div>`;
+          if (v.manualAdds.abs) mList.innerHTML += `<div>+${v.manualAdds.abs} ABST.</div>`;
+          pv.appendChild(mList);
+        }
+
+        pv.appendChild(list);
+      } else {
+        pv.style.display = 'none';
+      }
+    }
+
+    // ---------------- actions ----------------
+    function castVote(vId, option){
+      const v = state.votings.find(x=>x.id===vId); if(!v) return;
+      if (!currentGroups.includes(v.group)) { alert('No perteneces al grupo de esta votación.'); return; }
+      if (!v.votesByUser) v.votesByUser = {};
+      if (v.votesByUser[currentUser]) { alert('Ya votaste en esta votación.'); return; }
+      // Siempre registrar elección por usuario
+      v.votesByUser[currentUser] = option;
+      v.logs = v.logs || []; v.logs.push({ actor: currentUser, action: `Votó ${option.toUpperCase()}`, ts: Date.now() });
+      // NO actualizar totales ahora. Totales se calculan al revelar/finalizar (admin o auto-reveal).
+      saveState(state);
+      // render: no mostrar totales si todavía no debe revelarse
+      renderVoteButtons(v);
+      renderVotingList();
+      // solo renderResults si ya revelada
+      if (v.revealed) renderResults(v);
+      alert('Voto registrado.');
+    }
+
+    function addManualVote(vId, opt){
+      if (!currentIsAdmin) return;
+      const v = state.votings.find(x=>x.id===vId); if(!v) return;
+      v.logs = v.logs || [];
+      // Si la votación NO está revelada, mantener añadidos pendientes. Si está revelada, aplicar inmediatamente.
+      v.manualAdds = v.manualAdds || { yes:0, no:0, abs:0 };
+      if (!v.revealed) {
+        v.manualAdds[opt] = (v.manualAdds[opt]||0) + 1;
+        v.logs.push({ actor: currentUser, action: `Admin pending +1 ${opt.toUpperCase()}`, ts: Date.now() });
+      } else {
+        v.manualAdds[opt] = (v.manualAdds[opt]||0) + 1;
+        // aplicar ahora sumando a contadores visibles
+        if (opt==='yes') v.votes.yes = (v.votes.yes||0)+1;
+        if (opt==='no') v.votes.no = (v.votes.no||0)+1;
+        if (opt==='abs') v.votes.abs = (v.votes.abs||0)+1;
+        v.logs.push({ actor: currentUser, action: `Admin +1 ${opt.toUpperCase()}`, ts: Date.now() });
+      }
+      saveState(state);
+      renderAdminControls(v);
+      renderVotingList();
+      if (activeVotingId) showDetail(activeVotingId);
+    }
+
+    function revealOrFinalize(vId){
+      if (!currentIsAdmin) return;
+      const v = state.votings.find(x=>x.id===vId); if(!v) return;
+      // Calcular totales desde votos por usuario y manualAdds (si corresponde)
+      const tallies = { yes:0, no:0, abs:0 };
+      if (v.votesByUser) {
+        Object.values(v.votesByUser).forEach(o => {
+          if (o === 'yes') tallies.yes++;
+          else if (o === 'no') tallies.no++;
+          else if (o === 'abs') tallies.abs++;
+        });
+      }
+      if (v.manualAdds) {
+        tallies.yes += v.manualAdds.yes||0;
+        tallies.no  += v.manualAdds.no||0;
+        tallies.abs += v.manualAdds.abs||0;
+      }
+      // Si ya había votos contabilizados (p.ej. en votaciones públicas), sumar para seguridad
+      tallies.yes += v.votes && v.votes.yes ? v.votes.yes : 0;
+      tallies.no  += v.votes && v.votes.no ? v.votes.no : 0;
+      tallies.abs += v.votes && v.votes.abs ? v.votes.abs : 0;
+
+      v.votes = tallies;
+      const registered = groupMemberCount(v.group);
+      const voters = v.votesByUser ? Object.keys(v.votesByUser).length : 0;
+      v.absent = Math.max(0, registered - voters);
+      v.revealed = true;
+      v.status = 'final';
+      v.logs = v.logs || []; v.logs.push({ actor: currentUser, action:'Reveló y finalizó votación', ts: Date.now() });
+      saveState(state);
+      renderResults(v);
+      renderAdminControls(v);
+      renderVotingList();
+      if (activeVotingId) showDetail(activeVotingId);
+    }
+
+    // create voting
+    function openCreate(){
+      const sel = byId('cGroup'); if (sel) sel.innerHTML = '';
+      // populate modal select if exists (we have modal markup in file)
+      try {
+        const cGroup = document.getElementById('cGroup');
+        if (cGroup) { cGroup.innerHTML = ''; currentGroups.forEach(g=>{ const o = document.createElement('option'); o.value=g; o.textContent=g; cGroup.appendChild(o); }); }
+      } catch(e){}
+      byId('revealAtRow')?.style && (byId('revealAtRow').style.display='none');
+      byId('modal') && (byId('modal').style.display = 'flex');
+    }
+
+    // wire UI events
+    document.addEventListener('click', (ev)=>{
+      const btn = ev.target.closest('button[data-id]');
+      if (btn){ showDetail(btn.dataset.id); return; }
+      const card = ev.target.closest('.voting-card');
+      if (card && card.dataset && card.dataset.id) { showDetail(card.dataset.id); return; }
+    });
+
+    byId('btnYes').addEventListener('click', ()=>{ if(activeVotingId) castVote(activeVotingId,'yes'); });
+    byId('btnNo').addEventListener('click', ()=>{ if(activeVotingId) castVote(activeVotingId,'no'); });
+    byId('btnAbs').addEventListener('click', ()=>{ if(activeVotingId) castVote(activeVotingId,'abs'); });
+
+    byId('addYes')?.addEventListener('click', ()=>{ if(activeVotingId) addManualVote(activeVotingId,'yes'); });
+    byId('addNo')?.addEventListener('click', ()=>{ if(activeVotingId) addManualVote(activeVotingId,'no'); });
+    byId('addAbs')?.addEventListener('click', ()=>{ if(activeVotingId) addManualVote(activeVotingId,'abs'); });
+    byId('revealBtn')?.addEventListener('click', ()=>{ if(activeVotingId) revealOrFinalize(activeVotingId); });
+
+    byId('openCreateBtn').addEventListener('click', openCreate);
+    byId('logoutBtn').addEventListener('click', ()=>{ sessionStorage.removeItem('votingUser'); sessionStorage.removeItem('votingRole'); sessionStorage.removeItem('votingName'); window.location.href='login.html'; });
+
+    // initial render & auto-reveal
+    renderGroups(); renderVotingList();
+    const first = state.votings.find(v => currentGroups.includes(v.group));
+    if (first) showDetail(first.id);
+
+    // auto-reveal for secret_delayed
+    setInterval(()=>{
+      const now = Date.now();
+      let changed = false;
+      state.votings.forEach(v=>{
+        if (v.mode==='secret_delayed' && !v.revealed && v.revealAt && now >= v.revealAt){
+          // compute tallies like in revealOrFinalize
+          const tallies = { yes:0, no:0, abs:0 };
+          if (v.votesByUser) {
+            Object.values(v.votesByUser).forEach(o=>{
+              if (o === 'yes') tallies.yes++;
+              else if (o === 'no') tallies.no++;
+              else if (o === 'abs') tallies.abs++;
+            });
+          }
+          if (v.manualAdds) {
+            tallies.yes += v.manualAdds.yes||0;
+            tallies.no  += v.manualAdds.no||0;
+            tallies.abs += v.manualAdds.abs||0;
+          }
+          tallies.yes += v.votes && v.votes.yes ? v.votes.yes : 0;
+          tallies.no  += v.votes && v.votes.no ? v.votes.no : 0;
+          tallies.abs += v.votes && v.votes.abs ? v.votes.abs : 0;
+
+          v.votes = tallies;
+          const registered = groupMemberCount(v.group);
+          const voters = v.votesByUser ? Object.keys(v.votesByUser).length : 0;
+          v.absent = Math.max(0, registered - voters);
+          v.revealed = true;
+          v.status = 'final';
+          v.logs = v.logs || [];
+          v.logs.push({ actor: 'system', action: 'Auto-revelación alcanzada', ts: now });
+          changed = true;
+        }
+      });
+      if (changed){ saveState(state); renderVotingList(); if (activeVotingId) showDetail(activeVotingId); }
+    }, 3000);
+  </script>
+
+  <!-- Modal para crear votación (agregado) -->
+  <div id="modal" class="modal-back" role="dialog" aria-modal="true" style="display:none">
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0">Crear nueva votación</h3>
+        <button id="closeCreateModal" class="close-btn" aria-label="Cerrar">&times;</button>
+      </div>
+
+      <form id="createVotingForm">
+        <div class="form-row">
+          <label class="small-note" for="cTitle">Título</label>
+          <input id="cTitle" name="title" required />
+        </div>
+
+        <div class="form-row">
+          <label class="small-note" for="cText">Texto / resolución</label>
+          <textarea id="cText" name="text" rows="4" required></textarea>
+        </div>
+
+        <div class="form-row">
+          <label class="small-note" for="cGroup">Grupo</label>
+          <select id="cGroup" name="group" required></select>
+        </div>
+
+        <div class="form-row">
+          <label class="small-note" for="cMode">Modo</label>
+          <select id="cMode" name="mode">
+            <option value="public_realtime">Pública (tiempo real)</option>
+            <option value="secret_delayed">Secreta (revelación diferida)</option>
+          </select>
+        </div>
+
+        <div id="revealAtRow" class="form-row" style="display:none">
+          <label class="small-note" for="cRevealAt">Revelar en (fecha y hora)</label>
+          <input id="cRevealAt" name="revealAt" type="datetime-local" />
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button type="button" id="cancelCreate" class="btn">Cancelar</button>
+          <button type="submit" id="submitCreate" class="btn primary">Crear votación</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Hooks para el modal de creación: usa las funciones/variables existentes de [voting.html](voting.html)
+    (function(){
+      const modal = document.getElementById('modal');
+      const openBtn = document.getElementById('openCreateBtn');
+      const closeBtn = document.getElementById('closeCreateModal');
+      const cancelBtn = document.getElementById('cancelCreate');
+      const form = document.getElementById('createVotingForm');
+      const cGroup = document.getElementById('cGroup');
+      const cMode = document.getElementById('cMode');
+      const revealAtRow = document.getElementById('revealAtRow');
+      const cRevealAt = document.getElementById('cRevealAt');
+
+      // mostrar/ocultar input de reveal según modo
+      cMode.addEventListener('change', ()=> {
+        revealAtRow.style.display = cMode.value === 'secret_delayed' ? 'block' : 'none';
+      });
+
+      function openModalPopulate(){
+        // poblar select de grupos según currentGroups (variable global en [voting.html](voting.html))
+        if (cGroup) {
+          cGroup.innerHTML = '';
+          (currentGroups || []).forEach(g=>{
+            const o = document.createElement('option');
+            o.value = g; o.textContent = g;
+            cGroup.appendChild(o);
+          });
+        }
+        if (modal) modal.style.display = 'flex';
+      }
+
+      function closeModal(){
+        if (modal) modal.style.display = 'none';
+        form.reset();
+        revealAtRow.style.display = 'none';
+      }
+
+      openBtn && openBtn.addEventListener('click', openModalPopulate);
+      closeBtn && closeBtn.addEventListener('click', closeModal);
+      cancelBtn && cancelBtn.addEventListener('click', closeModal);
+      modal && modal.addEventListener('click', (ev)=> { if (ev.target === modal) closeModal(); });
+
+      form && form.addEventListener('submit', (ev)=>{
+        ev.preventDefault();
+        const title = document.getElementById('cTitle').value.trim();
+        const text = document.getElementById('cText').value.trim();
+        const group = document.getElementById('cGroup').value;
+        const mode = document.getElementById('cMode').value;
+        const revealVal = cRevealAt.value;
+
+        if (!title || !text || !group) { alert('Complete título, texto y grupo'); return; }
+
+        // crear objeto de votación consistente con el estado actual (usa generateId, saveState, renderVotingList)
+        const now = Date.now();
+        const newV = {
+           id: generateId ? generateId() : ('v-'+Math.random().toString(36).slice(2,9)),
+           title,
+           text,
+           group,
+           mode,
+           createdBy: currentUser || 'unknown',
+           createdAt: now,
+           votes: { yes:0, no:0, abs:0 },
+           votesByUser: {},
+           status: 'active',
+           // No revelar automáticamente: admin o timer decide la revelación
+           revealed: false,
+           revealAt: (mode === 'secret_delayed' && revealVal) ? (new Date(revealVal)).getTime() : null,
+           logs: [],
+           document: { body: text, font:'Inter, system-ui', fontSize:14 },
+           attachment: null
+         };
+
+        state.votings.push(newV);
+        saveState(state);
+        renderVotingList();
+        closeModal();
+        // abrir detalle de la votación nueva
+        showDetail(newV.id);
+        alert('Votación creada correctamente.');
+      });
+    })();
+  </script>
+</body>
+<!-- Overlay de resultados a pantalla completa -->
+<div id="resultOverlay" class="overlay-back" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+  <div class="overlay-card">
+    <button id="ovClose" class="overlay-close" title="Cerrar">&times;</button>
+    <h3 id="ovTitle" class="overlay-title">Resultado de la votación</h3>
+    <div id="ovMsg" class="overlay-sub"></div>
+
+    <div class="overlay-grid">
+      <div class="overlay-pill">
+        <div class="k">SÍ</div>
+        <div id="ovYes" class="v">0</div>
+      </div>
+      <div class="overlay-pill">
+        <div class="k">NO</div>
+        <div id="ovNo" class="v">0</div>
+      </div>
+      <div class="overlay-pill">
+        <div class="k">ABST.</div>
+        <div id="ovAbs" class="v">0</div>
+      </div>
+      <div class="overlay-pill">
+        <div class="k">AUSENTES</div>
+        <div id="ovAbsent" class="v">0</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</html>
